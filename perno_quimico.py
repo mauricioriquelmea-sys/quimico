@@ -7,7 +7,7 @@ import pandas as pd
 st.set_page_config(page_title="Structural Lab | ACI 318-11 Chemical Anchor", layout="wide")
 
 def main():
-    st.title("🧪 Engine: Anclajes Químicos (ACI 318-11)")
+    st.title("🧪Pernos Químicos (ACI 318-11)")
     st.info("⚠️ Nota Técnica: El análisis de tensiones y distribución de cargas se basa en el supuesto de placa base rígida.")
     st.write("---")
 
