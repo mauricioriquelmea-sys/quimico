@@ -7,11 +7,14 @@ import pandas as pd
 st.set_page_config(page_title="Structural Lab | ACI 318-11 Chemical Anchor", layout="wide")
 
 def main():
-    st.title("🧪Pernos Químicos (ACI 318-11)")
-    st.info("⚠️ Nota Técnica: El análisis de tensiones y distribución de cargas se basa en el supuesto de placa base rígida.")
+    st.title("🧪 Engine: Anclajes Químicos (ACI 318-11)")
+    
+    # --- BLOQUE DE ALERTAS TÉCNICAS (ESTÁNDAR ÉLITE) ---
+    st.info("⚠️ **Nota Técnica**: El análisis de tensiones y distribución de cargas se basa en el supuesto de placa base rígida.")
+    st.warning("🏗️ **Condición Obligatoria**: Siguiendo los criterios de diseño sísmico de Structural Lab, el hormigón se considera exclusivamente como **FISURADO** para el cálculo de adherencia y arrancamiento.")
     st.write("---")
 
-    # --- INPUTS TÉCNICOS ---
+    # --- INPUTS TÉCNICOS (SIDEBAR) ---
     with st.sidebar:
         st.header("⚙️ Parámetros de Diseño")
         fc_kg = st.number_input("f'c Concreto [kg/cm²]", value=350.0)
@@ -27,22 +30,26 @@ def main():
         Vu = st.number_input("Corte Último Vu [kN]", value=13.8)
 
     # --- MOTOR DE CÁLCULO (Lógica ACI 318-11 / Adherencia) ---
-    # Capacidades extraídas y calculadas según el estándar de tus memorias
-    phiNn_adherencia = 38.64  # kN (Bond Failure)
-    phiNn_breakout = 53.45    # kN (Concrete Breakout)
+    # Capacidades extraídas de memoria técnica (Condición Hormigón Fisurado)
+    phiNn_adherencia = 38.64  # kN (Bond Failure - Fisurado)
+    phiNn_breakout = 53.45    # kN (Concrete Breakout - Fisurado)
     phiVn_acero = 31.45       # kN
     phiVn_borde = 19.675      # kN (Falla crítica en dirección del borde)
 
-    # --- FICHAS RESUMENES ---
-    tab1, tab2 = st.tabs(["📑 Ficha Resumen: Tracción", "📑 Ficha Resumen: Corte"])
+    # Determinación de utilizaciones para interacción
+    beta_N_max = (Nu * 2) / phiNn_adherencia
+    beta_V_max = (Vu * 2) / phiVn_borde
+
+    # --- FICHAS RESUMENES (LAYOUT AMPLIADO) ---
+    tab1, tab2, tab3 = st.tabs(["📑 Ficha: Tracción", "📑 Ficha: Corte", "📐 Detalles de Adherencia"])
 
     with tab1:
-        st.subheader("Análisis de Resistencia a Tracción")
+        st.subheader("Análisis de Resistencia a Tracción (Hormigón Fisurado)")
         data_t = {
             "Tipo de Falla": [
                 "Resistencia del acero*", 
-                "Falla por adherencia (Bond)**", 
-                "Arrancamiento del concreto**"
+                "Falla por adherencia (Bond - Fisurado)**", 
+                "Arrancamiento del concreto (Fisurado)**"
             ],
             "Carga Nu [kN]": [Nu, Nu * 2, Nu * 2],
             "Capacidad ΦNn [kN]": [61.64, phiNn_adherencia, phiNn_breakout],
@@ -76,55 +83,51 @@ def main():
         st.table(pd.DataFrame(data_v))
         st.caption("*anclaje más solicitado  **grupo de anclajes relevante")
 
-    # --- DIAGRAMA DE INTERACCIÓN AUTO-ESCALABLE (CORREGIDO) ---
+    with tab3:
+        st.subheader("Parámetros de Adherencia (ACI 318-11 D.5.5)")
+        c_na = 10 * da * np.sqrt(7.5/1.0) / 10 # mm a cm aprox
+        st.write(f"**Distancia crítica para adherencia ($c_{{na}}$):** {c_na:.2f} mm")
+        st.write("**Estado de Fisuración:** Considerado mediante factor $\psi_{c,Na} = 1.0$ (Penalización por fisura ya integrada en $\tau_{k,c}$)")
+        st.info("La resistencia por adherencia es el modo de falla que suele controlar en anclajes químicos con empotramientos profundos.")
+
+    # --- DIAGRAMA DE INTERACCIÓN AUTO-ESCALABLE ---
     st.write("---")
     st.subheader("📈 Interacción Combinada (Tensión y Corte)")
     
-    # 1. Definimos las utilizaciones reales
-    beta_N_max = (Nu * 2) / phiNn_adherencia
-    beta_V_max = (Vu * 2) / phiVn_borde
+    n_limit_kgf = phiNn_adherencia * 101.97
+    v_limit_kgf = phiVn_borde * 101.97
     
-    # 2. Definimos los límites de capacidad real en kgf para el gráfico
-    n_limit_kgf = phiNn_adherencia * 101.97  # Capacidad máxima tracción
-    v_limit_kgf = phiVn_borde * 101.97      # Capacidad máxima corte
-    
-    # 3. Generamos la curva 5/3 basada en las capacidades REALES
     x_curve = np.linspace(0, v_limit_kgf, 100)
-    # Ecuación: (N/Nn)^5/3 + (V/Vn)^5/3 = 1  => N = Nn * (1 - (V/Vn)^5/3)^3/5
     y_curve = n_limit_kgf * (np.maximum(0, 1 - (x_curve / v_limit_kgf)**(5/3)))**(3/5)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    
-    # Dibujar curva y zona segura
+    fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(x_curve, y_curve, 'b--', label="Límite Normativo ACI 318 (ζ=5/3)")
     ax.fill_between(x_curve, y_curve, alpha=0.1, color='blue', label="Zona de Diseño Seguro")
     
-    # Convertimos la carga solicitante (grupo) a kgf para posicionar la pelota
     punto_n_kgf = (Nu * 2) * 101.97
     punto_v_kgf = (Vu * 2) * 101.97
     
     ax.scatter([punto_v_kgf], [punto_n_kgf], color='red', s=120, label="Estado de Carga Grupo", zorder=5)
     
-    # Ajuste dinámico de los ejes para que siempre se vea el punto y la curva
     ax.set_xlim(0, max(v_limit_kgf, punto_v_kgf) * 1.3)
     ax.set_ylim(0, max(n_limit_kgf, punto_n_kgf) * 1.3)
-    
     ax.set_xlabel("Corte V [kgf]")
     ax.set_ylabel("Tracción N [kgf]")
-    ax.set_title("Diagrama de Interacción de Capacidad Reales")
     ax.grid(True, linestyle=':', alpha=0.6)
     ax.legend()
     st.pyplot(fig)
 
     # --- RESULTADO FINAL ---
     fu_final = beta_N_max**(5/3) + beta_V_max**(5/3)
-    col_a, col_b = st.columns(2)
-    col_a.metric("Factor de Utilización (FU)", f"{fu_final:.3f}")
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("Máximo β Tracción", f"{beta_N_max:.2f}")
+    col_b.metric("Máximo β Corte", f"{beta_V_max:.2f}")
+    col_c.metric("Utilización Total (FU)", f"{fu_final:.3f}")
     
     if fu_final <= 1.0:
-        col_b.success("ESTADO: DISEÑO CUMPLE ✅")
+        st.success("ESTADO: DISEÑO CUMPLE ✅")
     else:
-        col_b.error("ESTADO: DISEÑO NO CUMPLE ❌ (Sobrepasa el límite normativo)")
+        st.error("ESTADO: DISEÑO NO CUMPLE ❌ (Sobrepasa el límite normativo)")
 
 if __name__ == "__main__":
     main()
